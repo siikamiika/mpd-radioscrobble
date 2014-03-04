@@ -55,7 +55,7 @@ def currentsong(connection):
                 song_dict['Artist'], song_dict['Title'] = \
                     song_dict.get('Title').split(' - ', 1)
             else:
-                return
+                return -1
 
         return song_dict
 
@@ -120,11 +120,13 @@ if __name__ == '__main__':
             else:
                 submittable = currentsong(conn)
 
-        if submittable:
-            if is_new_track(dict(queue), dict(submittable)):
-                reauth = scrobble(scrobbler, queue)
-                if reauth:
-                    scrobbler = reauth
-                queue = dict(submittable)
+        elif submittable == -1:
+                pass
+
+        elif is_new_track(dict(queue), dict(submittable)):
+            reauth = scrobble(scrobbler, queue)
+            if reauth:
+                scrobbler = reauth
+            queue = dict(submittable)
 
         time.sleep(10)
