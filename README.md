@@ -18,11 +18,14 @@ Howto
 Place apikey.secret and login.secret in the
 directory where you run mpd_radioscrobble.py.
 
-login.secret has your username and password
+login.secret has your username and password hash
 separated with a newline, such as:
 
 	username123
-	passw0rd
+	bed128365216c019988915ed3add75fb
+
+Run [password-hash.py](password-hash.py) to generate
+login.secret with your username and password hash.
 
 For apikey.secret you need an account from
 http://www.last.fm/api/account/create

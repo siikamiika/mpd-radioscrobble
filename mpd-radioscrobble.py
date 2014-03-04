@@ -11,7 +11,7 @@ try:
     with open('apikey.secret', 'r') as apikey:
         API_KEY, API_SECRET = apikey.read().splitlines()[:2]
     with open('login.secret', 'r') as login:
-        USERNAME, PASSWORD = login.read().splitlines()[:2]
+        USERNAME, PASSWORD_HASH = login.read().splitlines()[:2]
 except Exception as e:
     print(e)
     sys.exit()
@@ -21,7 +21,7 @@ def auth():
         api_key = API_KEY,
         api_secret = API_SECRET,
         username = USERNAME,
-        password_hash = pylast.md5(PASSWORD)
+        password_hash = PASSWORD_HASH
     )
 
 def connect():
