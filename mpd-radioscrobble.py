@@ -7,6 +7,8 @@ from datetime import datetime
 from html.parser import HTMLParser
 hp = HTMLParser()
 
+DEBUG = True
+
 try:
     with open('apikey.secret', 'r') as apikey:
         API_KEY, API_SECRET = apikey.read().splitlines()[:2]
@@ -73,6 +75,7 @@ def scrobble(scrobbler, track):
     """
     if not (track['Artist'] and track['Title']):
         return
+
     track_args = dict(
             # Unescape artist and title just in case
             artist=hp.unescape(track['Artist']),
@@ -89,8 +92,11 @@ def scrobble(scrobbler, track):
             track['Artist'], track['Title']
         )
     try:
+        #debug = \
         scrobbler.scrobble(**track_args)
         print(scrobble_info)
+        #if debug:
+        #    print('scrobble debug:\n', debug.toprettyxml())
     except Exception as e:
         print('{}, attempting reauth...'.format(e))
         scrobbler = auth()
@@ -99,10 +105,24 @@ def scrobble(scrobbler, track):
         return scrobbler
 
 def publish_nowplaying(scrobbler, scrobblequeue):
+
+    if DEBUG:
+        def debug_now_playing(self, artist, title):
+            params = {'track': title, 'artist': artist}
+            return pylast._Request(
+                self, 'track.updateNowPlaying', params
+            ).execute()
+
+        scrobbler.update_now_playing = debug_now_playing.__get__(
+            scrobbler, pylast.LastFMNetwork
+        )
+
     try:
-        scrobbler.update_now_playing(
+        debug = scrobbler.update_now_playing(
             scrobblequeue.get('Artist'), queue.get('Title')
         )
+        if debug:
+            print('nowplaying debug:\n', debug.toprettyxml())
     except Exception as e:
         print('can\'t publish nowplaying:', e)
 
@@ -149,6 +169,9 @@ if __name__ == '__main__':
             if reauth:
                 scrobbler = reauth
             queue = dict(submittable)
+            # testing if too frequent requests make last.fm
+            # sometimes reject nowplaying
+            time.sleep(2)
             publish_nowplaying(scrobbler, queue)
 
         time.sleep(10)
