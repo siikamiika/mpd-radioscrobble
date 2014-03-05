@@ -45,7 +45,7 @@ def currentsong(connection):
         connection.send(b'currentsong\n')
         response = connection.recv(1024)
         song_dict = dict(
-                (l[:l.index(':')], l[l.index(' ')+1:])
+                (l.split(': ', 1))
                 for l in response.decode().strip().splitlines()[:-1]
             )
 
