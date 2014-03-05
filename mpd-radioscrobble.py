@@ -39,7 +39,7 @@ def currentsong(connection):
     """
     Return dictionary containing MPD currentsong output.
     If no Artist is specified, try to find it from Title before ' - '.
-    If Artist is not found, return None.
+    If Artist is not found, return -1 (meaning "skip this").
     """
     try:
         connection.send(b'currentsong\n')
@@ -64,6 +64,13 @@ def currentsong(connection):
         return
 
 def scrobble(scrobbler, track):
+    """
+    Attempt to scrobble a track if it has non-empty Artist and Title
+    keys. If the scrobble fails, try to reauthenticate and scrobble
+    the track one more time. If that scrobble succeeds, the new
+    authentication is passed to the loop for future use. Otherwise
+    the scrobbler will exit with an error.
+    """
     if not (track['Artist'] and track['Title']):
         return
     track_args = dict(
@@ -91,12 +98,21 @@ def scrobble(scrobbler, track):
         print(scrobble_info)
         return scrobbler
 
+def publish_nowplaying(scrobbler, scrobblequeue):
+    try:
+        scrobbler.update_now_playing(
+            scrobblequeue.get('Artist'), queue.get('Title')
+        )
+    except Exception as e:
+        print('can\'t publish nowplaying:', e)
+
+
 def is_new_track(queue, submittable):
+    """Triggers the scrobble of a queued track when True"""
     if not queue:
         queue = dict()
     queue['timestamp'] = None
     submittable['timestamp'] = None
-    # bool(empty_dict.items() - some_dict.items()) == False
     if queue.items() - submittable.items():
         return True
     else:
@@ -104,11 +120,13 @@ def is_new_track(queue, submittable):
 
 
 if __name__ == '__main__':
-    # start loop
+    # prepare for loop
     conn = connect()
     queue = currentsong(conn)
     scrobbler = auth()
+    publish_nowplaying(scrobbler, queue)
 
+    # check currentsong every 10 sec
     while True:
         submittable = currentsong(conn)
         if not submittable:
@@ -120,13 +138,17 @@ if __name__ == '__main__':
             else:
                 submittable = currentsong(conn)
 
+        # ignore invalid songs
         elif submittable == -1:
                 pass
 
+        # scrobble queued track, check authentication, update queue
+        # and publish current song with update_now_playing
         elif is_new_track(dict(queue), dict(submittable)):
             reauth = scrobble(scrobbler, queue)
             if reauth:
                 scrobbler = reauth
             queue = dict(submittable)
+            publish_nowplaying(scrobbler, queue)
 
         time.sleep(10)

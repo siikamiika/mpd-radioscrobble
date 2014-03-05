@@ -42,6 +42,5 @@ because it changes "Id" in "currentsong" output.
 To be able to scrobble a local track multiple times
 in a row you can't ignore "Id".
 
-When MPD is paused, the previous track will be scrobbled
-the next time a track changes.
-
+When MPD is paused, the paused track won't be scrobbled
+until the track changes.
