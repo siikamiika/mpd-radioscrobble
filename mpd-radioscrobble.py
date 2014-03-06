@@ -2,12 +2,14 @@
 import socket
 import time
 import sys
+import os
 import pylast
+from threading import Thread
 from datetime import datetime
 from html.parser import HTMLParser
 hp = HTMLParser()
 
-DEBUG = True
+DEBUG = False
 
 try:
     with open('apikey.secret', 'r') as apikey:
@@ -25,6 +27,32 @@ def auth():
         username = USERNAME,
         password_hash = PASSWORD_HASH
     )
+
+def keybind_listener():
+    """
+    xbindkeys can be used to echo commands to the fifo
+    example .xbindkeysrc entry:
+    "echo love > /tmp/scrobbler.fifo"
+        Control+Alt + KP_Insert
+    """
+    fifo_path = '/tmp/scrobbler.fifo'
+    if os.path.exists(fifo_path):
+        os.remove(fifo_path)
+    os.mkfifo(fifo_path)
+    while True:
+        with open(fifo_path, 'r') as f:
+            command = f.read().splitlines()[0]
+            if command in ['love', 'unlove']:
+                print('command:', command)
+                try:
+                    scrobbler.get_track(
+                        artist=queue['Artist'],
+                        title=queue['Title']
+                        )._request('track.{}'.format(command))
+                except Exception as e:
+                    print(e)
+            else:
+                print('unknown command:', command)
 
 def connect():
     """Return a new connection to MPD or None on error."""
@@ -145,6 +173,7 @@ if __name__ == '__main__':
     queue = currentsong(conn)
     scrobbler = auth()
     publish_nowplaying(scrobbler, queue)
+    Thread(target=keybind_listener).start()
 
     # check currentsong every 10 sec
     while True:
@@ -155,12 +184,14 @@ if __name__ == '__main__':
             if not conn:
                 time.sleep(60)
                 continue
-            else:
-                submittable = currentsong(conn)
 
         # ignore invalid songs
         elif submittable == -1:
-                pass
+            pass
+
+        # fix for invalid first track
+        elif queue == -1:
+            queue = dict(submittable)
 
         # scrobble queued track, check authentication, update queue
         # and publish current song with update_now_playing
@@ -169,9 +200,7 @@ if __name__ == '__main__':
             if reauth:
                 scrobbler = reauth
             queue = dict(submittable)
-            # testing if too frequent requests make last.fm
-            # sometimes reject nowplaying
-            time.sleep(2)
+            time.sleep(1)
             publish_nowplaying(scrobbler, queue)
 
         time.sleep(10)
