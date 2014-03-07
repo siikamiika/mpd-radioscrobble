@@ -3,6 +3,8 @@ import socket
 import time
 import sys
 import os
+from traceback import print_exc
+import re
 import pylast
 from threading import Thread
 from datetime import datetime
@@ -17,7 +19,7 @@ try:
     with open('login.secret', 'r') as login:
         USERNAME, PASSWORD_HASH = login.read().splitlines()[:2]
 except Exception as e:
-    print(e)
+    print_exc()
     sys.exit()
 
 def auth():
@@ -39,20 +41,39 @@ def keybind_listener():
     if os.path.exists(fifo_path):
         os.remove(fifo_path)
     os.mkfifo(fifo_path)
+    playback_commands = re.compile(
+        '^(next|previous|play|stop|volume (\+|-)[0-9]{1,2})$')
+    global SCROBBLING
     while True:
         with open(fifo_path, 'r') as f:
-            command = f.read().splitlines()[0]
-            if command in ['love', 'unlove']:
-                print('command:', command)
-                try:
+            try:
+                command = f.read().splitlines()[0]
+                if command == 'SCROBBLING':
+                    SCROBBLING = not SCROBBLING
+                    print('scrobbling: {}'.format(SCROBBLING))
+                # love or unlove current song on last.fm
+                elif command in ['love', 'unlove']:
+                    print(command, queue['Title'])
                     scrobbler.get_track(
                         artist=queue['Artist'],
                         title=queue['Title']
                         )._request('track.{}'.format(command))
-                except Exception as e:
-                    print(e)
-            else:
-                print('unknown command:', command)
+                # if stopped, send play instead of pause
+                elif command == 'pause':
+                    conn.send(b'status\n')
+                    if b'state: stop' in conn.recv(1024):
+                        conn.send(b'play\n')
+                    else:
+                        conn.send((command+'\n').encode())
+                    conn.recv(1024)
+                # other MPD playback commands
+                elif playback_commands.match(command):
+                    conn.send((command+'\n').encode())
+                    conn.recv(1024)
+                else:
+                    print('unknown command:', command)
+            except Exception as e:
+                print_exc()
 
 def connect():
     """Return a new connection to MPD or None on error."""
@@ -62,7 +83,7 @@ def connect():
         print(conn.recv(1024).decode())
         return conn
     except Exception as e:
-        print(e)
+        print_exc()
         return
 
 def currentsong(connection):
@@ -90,7 +111,7 @@ def currentsong(connection):
         return song_dict
 
     except Exception as e:
-        print(e)
+        print_exc()
         return
 
 def scrobble(scrobbler, track):
@@ -169,6 +190,7 @@ def is_new_track(queue, submittable):
 
 if __name__ == '__main__':
     # prepare for loop
+    SCROBBLING = True
     conn = connect()
     queue = currentsong(conn)
     scrobbler = auth()
@@ -177,6 +199,10 @@ if __name__ == '__main__':
 
     # check currentsong every 10 sec
     while True:
+        if not SCROBBLING:
+            queue = -1
+            time.sleep(10)
+            continue
         submittable = currentsong(conn)
         if not submittable:
             conn = connect()
